@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import sys, getopt, csv
+from collections import namedtuple
 
 SCRIPT_NAME = 'csv2bib' 
 BIB_ATTRIBUTE_MAP = {
@@ -8,7 +9,7 @@ BIB_ATTRIBUTE_MAP = {
   'author':       ['author', 'authors'],
   'chapter':      ['chapter'],
   'edition':      ['edition'],
-  'editor':       ['editor'],
+  'editor':       ['editor', 'editors'],
   'howpublished': ['url', 'howpublished'],
   'journal':      ['journal', 'journal name'],
   'key':          ['key'],
@@ -17,7 +18,8 @@ BIB_ATTRIBUTE_MAP = {
   'pages':        ['pages'],
   'publisher':    ['publisher'],
   'series':       ['series'],
-  'title':        ['title', 'book title', 'volume title'],
+  'title':        ['title', 'book title', 'contribution titel'],
+  'booktitle':    ['volume title'],
   'volume':       ['volume'],
   'year':         ['year', 'date'],
 }
@@ -27,8 +29,9 @@ ALLOWED_ATTRIBUTES_BY_TYPE = {
                'pages', 'month', 'doi', 'note', 'key'],
   'book': [ 'author', 'editor', 'title', 'publisher', 'year', 'volume',
             'series', 'address', 'edition', 'month', 'note', 'key'],
-  'inbook': [ 'author', 'editor', 'title', 'publisher', 'year', 'volume',
-            'series', 'address', 'edition', 'month', 'note', 'pages', 'key' ],
+  'incollection': [ 'author', 'title', 'booktitle', 'publisher', 'year',
+                    'editor', 'volume/number', 'series', 'type', 'chapter',
+                    'pages', 'address', 'edition', 'month', 'note', 'key'],
   'misc': [ 'author', 'title', 'howpublished', 'month', 'year', 'note', 'key']
 }
 
@@ -37,18 +40,26 @@ class CSVParseError(Exception):
 
 # [0 => 'author', 1 => 'title', ...]
 def parse_headers(headers, bib_attribute_map = BIB_ATTRIBUTE_MAP):
-  attributes_order = {}
+  valid_columns = {}
+  invalid_columns = {}
 
   for i, header in enumerate(headers):
+    found = False
     for bib_attribute, bib_attribute_variants in bib_attribute_map.items():
       # The reference attribute is recognised, and allowed for that reference type
       if header.lower() in bib_attribute_variants:
-        attributes_order[i] = bib_attribute
+        valid_columns[i] = bib_attribute
+        found = True
 
-  if 'key' not in attributes_order.values():
+    if found == False:
+      invalid_columns[i] = header.strip()
+
+  if 'key' not in valid_columns.values():
     raise CSVParseError('no "key" column found')
 
-  return attributes_order
+
+  columns = namedtuple("columns", ["valid", "invalid"])
+  return columns(valid_columns, invalid_columns)
 
 def parse_reference(row, attributes_order):
   ref = {}
@@ -77,7 +88,7 @@ def guess_refs_type_from_headers(headers):
     return 'article'
 
   if 'pages' in headers.values():
-    return 'inbook'
+    return 'incollection'
 
   return 'book'
 
@@ -94,7 +105,6 @@ def to_bib(ref, ref_type):
   bib_ref += "}\n"
   return bib_ref
 
-
 def strip_disallowed_headers(attributes_order, refs_type, allowed_attributes_by_type=ALLOWED_ATTRIBUTES_BY_TYPE):
   clean_attributes_order = {}
   for idx, header in attributes_order.items():
@@ -104,7 +114,7 @@ def strip_disallowed_headers(attributes_order, refs_type, allowed_attributes_by_
   return clean_attributes_order
 
 def csv_to_bib(csv_file):
-  attributes_order = {}
+  recognised_columns = {}
   bib_refs = []
 
   with open(csv_file, 'r') as f:
@@ -115,14 +125,18 @@ def csv_to_bib(csv_file):
       if len(''.join(row)) == 0: # skip leading empty lines
         continue
       
-      if len(attributes_order) == 0:
+      if len(recognised_columns) == 0:
         # We assume all refs in a CSV are the same type (book, article, ...)
-        attributes_order = parse_headers(row)
-        refs_type = guess_refs_type_from_headers(attributes_order)
-        attributes_order = strip_disallowed_headers(attributes_order, refs_type)
+        columns = parse_headers(row)
+
+        for idx in columns.invalid:
+          print('Warning in file %s: unrecognised column %s' % (csv_file, columns.invalid[idx]), file=sys.stderr)
+
+        refs_type = guess_refs_type_from_headers(columns.valid)
+        recognised_columns = strip_disallowed_headers(columns.valid, refs_type)
         continue
 
-      reference = parse_reference(row, attributes_order)
+      reference = parse_reference(row, columns.valid)
       bib_refs.append(to_bib(reference, refs_type))
 
   return "\n".join(bib_refs)

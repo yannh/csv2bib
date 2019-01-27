@@ -3,13 +3,15 @@ import pytest
 
 def test_guess_refs_type_from_headers():
   assert csv2bib.guess_refs_type_from_headers({0:' key', 1: 'title', 5: 'year'}) == 'book'
-  assert csv2bib.guess_refs_type_from_headers({0:' key', 1: 'title', 5: 'year', 6: 'pages'}) == 'inbook'
+  assert csv2bib.guess_refs_type_from_headers({0:' key', 1: 'title', 5: 'year', 6: 'pages'}) == 'incollection'
   assert csv2bib.guess_refs_type_from_headers({0:' key', 1: 'title', 5: 'year', 6: 'pages', 15: 'journal'}) == 'article'
   assert csv2bib.guess_refs_type_from_headers({0:' key', 1: 'howpublished', 5: 'year', 6: 'pages', 15: 'journal'}) == 'misc'
 
 
 def test_parse_headers():
-  assert csv2bib.parse_headers(['', 'key', 'invalid', 'invalid', 'title']) == {1: 'key', 4: 'title'}
+  h = csv2bib.parse_headers(['', 'key', 'invalid', 'invalid', 'title'])
+  assert h.valid == {1: 'key', 4: 'title'}
+  assert h.invalid == {0: '', 2: 'invalid', 3: 'invalid'}
   with pytest.raises(csv2bib.CSVParseError):
     csv2bib.parse_headers(['pages', 'title', 'year']) == {0: 'pages', 1: 'title', 2: 'year'}
 
