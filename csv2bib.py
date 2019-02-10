@@ -3,9 +3,10 @@
 import sys, getopt, csv
 from collections import namedtuple
 
-SCRIPT_NAME = 'csv2bib' 
+SCRIPT_NAME = 'csv2bib'
+
 BIB_ATTRIBUTE_MAP = {
-  'address':      ['address'],
+  'address':      ['address', 'place of publication'],
   'author':       ['author', 'authors'],
   'chapter':      ['chapter'],
   'edition':      ['edition'],
@@ -15,10 +16,11 @@ BIB_ATTRIBUTE_MAP = {
   'key':          ['key'],
   'month':        ['month'],
   'note':         ['note'],
+  'number':	  ['issue number'],
   'pages':        ['pages'],
   'publisher':    ['publisher'],
-  'series':       ['series'],
-  'title':        ['title', 'book title', 'contribution titel'],
+  'series':       ['series', 'series and - if applicable - series number'],
+  'title':        ['title', 'book title', 'contribution titel', 'article title'],
   'booktitle':    ['volume title'],
   'volume':       ['volume'],
   'year':         ['year', 'date'],
@@ -101,7 +103,9 @@ def to_bib(ref, ref_type):
     if attr == 'howpublished' and attr_value.startswith('http'):
       attr_value = "\\url{%s}" % attr_value
 
-    bib_ref += '  %s = "%s",\n' %(attr, attr_value)
+    for one_author in attr_value.split(';'):
+      bib_ref += '  %s = "%s",\n' %(attr, one_author.strip())
+
   bib_ref += "}\n"
   return bib_ref
 
@@ -113,13 +117,13 @@ def strip_disallowed_headers(attributes_order, refs_type, allowed_attributes_by_
 
   return clean_attributes_order
 
-def csv_to_bib(csv_file):
+def csv_to_bib(csv_file, delimiter):
   recognised_columns = {}
   bib_refs = []
 
   with open(csv_file, 'r') as f:
     refs_type = ''
-    csv_reader = csv.reader(f, delimiter=',', quotechar='"')
+    csv_reader = csv.reader(f, delimiter=delimiter, quotechar='"')
 
     for row in csv_reader:
       if len(''.join(row)) == 0: # skip leading empty lines
@@ -144,6 +148,7 @@ def csv_to_bib(csv_file):
 
 def main(argv):
   failure = 0
+  delimiter = ','
 
   try:
     opts, csv_files = getopt.getopt(argv,"-d:")
@@ -151,9 +156,16 @@ def main(argv):
     print('Error parsing command line. Usage:\n')
     print("    %s -d <delimiter> file1 file2 ...\n" % SCRIPT_NAME)
     return 2
+
+  for o, a in opts:
+    if o == "-d":
+      delimiter = a
+    else:
+      assert False, "unhandled option"
+
   for csv_file in csv_files:
     try:
-      print (csv_to_bib(csv_file))
+      print (csv_to_bib(csv_file, delimiter))
     except CSVParseError as e:
         print ('Error: Failed to parse %s: %s' % (csv_file, str(e)), file=sys.stderr)
         failure = 1
